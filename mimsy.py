@@ -56,7 +56,7 @@ class System(object):
     """
     
     def __init__(self):
-        self.memory = [None] * (MEMORY_SIZE + 7) # 7 For the registers.
+        self.memory = [None] * (MEMORY_SIZE + 6) # 6 For the registers.
         self.macros = {}
         self.memory[REG_HAND] = 0
         self.memory[REG_CODE] = []
@@ -81,16 +81,29 @@ class System(object):
             
         
         def xmimDebug(mimsy):
-            print 'Memory: %d cells' % len(self.memory)
-            print self.memory
+            print 'Memory -- %d cells' % (len(self.memory) - 6)
+            print self.memory[0:MEMORY_SIZE]
             print
+            print 'Hand[%d]:\t%s' % (REG_HAND, self.memory[REG_HAND])
+            print
+            print 'Code[%d]:\t%s' % (REG_CODE, self.memory[REG_CODE])
+            print
+            print 'IP[%d]:\t%s' % (REG_IP, self.memory[REG_IP])
+            print
+            print 'JMP[%d]:\t%s' % (REG_JMP, self.memory[REG_JMP])
+            print
+            print 'Flags[%d]:\t%s' % (REG_FLAGS, self.memory[REG_FLAGS])
+            print
+            print 'Select[%d]:\t%s' % (REG_SELECT, self.memory[REG_SELECT])
+            print 
             print 'Macros'
-            print self.macros
+            for key, data in self.macros.iteritems():
+                print '%s: \t%s' % (key, data)
         
         self.macros["xioPut"] = xioPut
         self.macros["xioGet"] = xioGet
         self.macros["xmimDebug"] = xmimDebug
-        self.macros["xmimNull"] = 0
+        self.macros["xmimNull"] = None
         
 
 def list_to_string(l):
@@ -646,7 +659,10 @@ def run(mimsy, code):
     
     def op_macro(mimsy, args):
         if len(args) == 1:
-            mimsy.macros[args[0]] = copy.deepcopy(mimsy.memory[REG_HAND])
+            if mimsy.memory[REG_HAND] == None:
+                del mimsy.macros[args[0]]
+            else:
+                mimsy.macros[args[0]] = copy.deepcopy(mimsy.memory[REG_HAND])
         elif len(args) == 2:
             mimsy.macros[args[0]] = copy.deepcopy(args[1])
     
