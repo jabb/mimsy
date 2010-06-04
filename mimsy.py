@@ -37,14 +37,18 @@ TOK_MACROB, TOK_MACROE, TOK_SELECTB, TOK_SELECTE = range(10)
 OP_SELECT, OP_SET, OP_GET, OP_LIT, OP_MANIP,        \
 OP_NAME, OP_MACRO,                                  \
 OP_MULT, OP_DIV, OP_MOD, OP_SUB, OP_PLUS, OP_AND,   \
-OP_XOR, OP_OR, OP_NEG, OP_NOT, OP_CMP, OP_TYPE,     \
+OP_XOR, OP_OR, OP_NEG, OP_NOT, OP_CMP, OP_LEN,     \
 OP_SAVE, OP_PLACEHOLD, OP_JMP, OP_JMPEQ, OP_CALL = range(24)
 
 # Register constants.
-REG_HAND, REG_CODE, REG_IP, REG_JMP, REG_FLAGS, REG_PIT, REG_SELECT = range(MEMORY_SIZE, MEMORY_SIZE + 7)
+REG_HAND, REG_CODE, REG_IP, REG_JMP, REG_FLAGS, REG_SELECT = range(MEMORY_SIZE, MEMORY_SIZE + 6)
 
 # Flag constants
 FLAG_EQ, FLAG_NE, FLAG_GT, FLAG_LT = range(4)
+
+class Error(Exception):
+    """
+    """
 
 class System(object):
     """
@@ -59,7 +63,6 @@ class System(object):
         self.memory[REG_IP] = 0
         self.memory[REG_JMP] = []
         self.memory[REG_FLAGS] = [0, 0, 0, 0]
-        self.memory[REG_PIT] = 0
         self.memory[REG_SELECT] = []
         
         # Load default macros.
@@ -149,7 +152,7 @@ def tokenize(string):
                 tokens.append([tok, m.group(0)])
                 string = string[m.end():]
         if match == False:
-            raise Exception('Syntax error')
+            raise Error('Syntax error')
 
     return tokens
 
@@ -170,10 +173,10 @@ def analize(tokens):
             elif tokens[i][0] in (TOK_NUMBER, TOK_STRING, TOK_NAME):
                 pass
             else:
-                raise Exception('Invalid list parameters!')
+                raise Error('Invalid list parameters!')
             i += 1
         else:
-            raise Exception('Stray [ found!')
+            raise Error('Stray [ found!')
         return i + 1
     
     def check_macro(tokens, i):
@@ -181,7 +184,7 @@ def analize(tokens):
         arg = False
         
         if i >= len(tokens) or tokens[i][0] != TOK_NAME:
-            raise Exception('Macros require names!')
+            raise Error('Macros require names!')
         
         i += 1
         while i < len(tokens):
@@ -189,20 +192,20 @@ def analize(tokens):
                 break
             elif tokens[i][0] in (TOK_NUMBER, TOK_STRING):
                 if arg == True:
-                    raise Exception('Too many macro parameters!')
+                    raise Error('Too many macro parameters!')
                 else:
                     arg = True
             elif tokens[i][0] == TOK_LISTB:
                 if arg == True:
-                    raise Exception('Too many macro parameters!')
+                    raise Error('Too many macro parameters!')
                 else:
                     arg = True
                     i = check_list(tokens, i) - 1
             else:
-                raise Exception('Invalid macro parameters!')
+                raise Error('Invalid macro parameters!')
             i += 1
         else:
-            raise Exception('Stray { found!')
+            raise Error('Stray { found!')
         return i + 1
     
     def check_select(tokens, i):
@@ -212,9 +215,9 @@ def analize(tokens):
         
         if tokens[i][1] in "$~@!*^?":
             if i+1 >= len(tokens):
-                raise Exception('Stray ( found!')
+                raise Error('Stray ( found!')
             if tokens[i+1][0] != TOK_SELECTE:
-                raise Exception('Stray ( found!')
+                raise Error('Stray ( found!')
             return i + 1
         elif tokens[i][1] == ',':
             if i+2 < len(tokens):
@@ -224,29 +227,29 @@ def analize(tokens):
             if i+1 < len(tokens):
                 if tokens[i+1][0] == TOK_SELECTE:
                     return i + 1
-            raise Exception('Invalid select parameters!')
+            raise Error('Invalid select parameters!')
         
         
         while i < len(tokens):
             if tokens[i][0] == TOK_SELECTE:
                 if expected == EITHER:
-                    raise Exception('No parameters!')
+                    raise Error('No parameters!')
                 if expected == NUMBERNAME:
-                    raise Exception('Select parameter; trailing comma')
+                    raise Error('Select parameter; trailing comma')
                 break
             elif tokens[i][0] in (TOK_NUMBER, TOK_NAME):
                 if expected not in (NUMBERNAME, EITHER):
-                    raise Exception('Invalid select parameters!')
+                    raise Error('Invalid select parameters!')
                 expected = COMMA
             elif tokens[i][1] == ',':
                 if expected not in (COMMA, EITHER):
-                    raise Exception('Invalid select parameters!')
+                    raise Error('Invalid select parameters!')
                 expected = NUMBERNAME
             else:
-                raise Exception('Invalid select parameters!')
+                raise Error('Invalid select parameters!')
             i += 1
         else:
-            raise Exception('Stray ( found!')
+            raise Error('Stray ( found!')
         return i
     
     while i < len(tokens):
@@ -261,15 +264,15 @@ def analize(tokens):
         elif tokens[i][0] == TOK_LISTB:
             i = check_list(tokens, i)
         elif tokens[i][0] == TOK_LISTE:
-            raise Exception('%d: %s: Stray ] found!' % (i, tokens[i]))
+            raise Error('%d: %s: Stray ] found!' % (i, tokens[i]))
         elif tokens[i][0] == TOK_MACROB:
             i = check_macro(tokens, i)
         elif tokens[i][0] == TOK_MACROE:
-            raise Exception('%d: %s: Stray } found!' % (i, tokens[i]))
+            raise Error('%d: %s: Stray } found!' % (i, tokens[i]))
         elif tokens[i][0] == TOK_SELECTB:
             i = check_select(tokens, i)
         elif tokens[i][0] == TOK_SELECTE:
-            raise Exception('%d: %s: Stray ) found!' % (i, tokens[i]))
+            raise Error('%d: %s: Stray ) found!' % (i, tokens[i]))
         i += 1
 
 def compil(tokens):
@@ -306,7 +309,7 @@ def compil(tokens):
         Arguments: A name followed by zero or one element.
     
     OP_MULT, OP_DIV, OP_MOD, OP_SUB, OP_PLUS, OP_AND,
-    OP_XOR, OP_OR, OP_NEG, OP_NOT, OP_CMP, OP_TYPE,
+    OP_XOR, OP_OR, OP_NEG, OP_NOT, OP_CMP, OP_LEN,
     OP_SAVE, OP_PLACEHOLD, OP_JMP, OP_JMPEQ, OP_CALL,
     OP_SET, OP_GET, OP_MANIP
         All of these require no arguments, they're just single element
@@ -347,7 +350,7 @@ def compil(tokens):
         elif tokens[i][1] == '=':
             return [OP_CMP], i
         elif tokens[i][1] == '$':
-            return [OP_TYPE], i
+            return [OP_LEN], i
         elif tokens[i][1] == '@':
             return [OP_SAVE], i
         elif tokens[i][1] == ';':
@@ -359,7 +362,7 @@ def compil(tokens):
         elif tokens[i][1] == '`':
             return [OP_CALL], i
         else:
-            raise Exception('Critical error when compiling operators')
+            raise Error('Critical error when compiling operators')
         
     def compile_literal(tokens, i):
         if tokens[i][0] == TOK_NUMBER:
@@ -376,7 +379,7 @@ def compil(tokens):
                 try:
                     n = float(n[ind:])
                 except:
-                    raise Exception('Failed to convert number')
+                    raise Error('Failed to convert number')
             n *= neg
             
             return [OP_LIT, n], i
@@ -385,7 +388,7 @@ def compil(tokens):
             s = s[1:-1]
             return [OP_LIT, string_to_list(s)], i
         else:
-            raise Exception('Bug in compile_literal')
+            raise Error('Bug in compile_literal')
     
     def compile_name(tokens, i):
         return [OP_NAME, tokens[i][1]], i
@@ -406,9 +409,9 @@ def compil(tokens):
                 name, i = compile_name(tokens, i)
                 l.append(name)
             else:
-                raise Exception('Invalid list parameters!')
+                raise Error('Invalid list parameters!')
             i += 1
-        raise Exception('Failed to compile list')
+        raise Error('Failed to compile list')
     
     def compile_macro(tokens, i):
         i += 1
@@ -427,7 +430,7 @@ def compil(tokens):
                 l, i = compile_list(tokens, i)
                 op.append(l)
             i += 1
-        raise Exception('Failed to compile macro')
+        raise Error('Failed to compile macro')
     
     def compile_select(tokens, i):
         i += 1
@@ -438,8 +441,6 @@ def compil(tokens):
         if tokens[i][1] in "$~@!*^?":
             if tokens[i][1] == '$':
                 return [OP_SELECT, [OP_LIT, []]], i
-            if tokens[i][1] == '~':
-                return [OP_SELECT, [OP_LIT, REG_PIT]], i
             if tokens[i][1] == '@':
                 return [OP_SELECT, [OP_LIT, REG_HAND]], i
             if tokens[i][1] == '!':
@@ -450,6 +451,8 @@ def compil(tokens):
                 return [OP_SELECT, [OP_LIT, REG_JMP]], i
             if tokens[i][1] == '?':
                 return [OP_SELECT, [OP_LIT, REG_FLAGS]], i
+            if tokens[i][1] == '~':
+                return [OP_SELECT, [OP_LIT, REG_SELECT]], i
         elif tokens[i][1] == ',':
             if i+2 < len(tokens):
                 if tokens[i+1][0] == TOK_NAME and tokens[i+2][0] == TOK_SELECTE:
@@ -461,7 +464,7 @@ def compil(tokens):
             if i+1 < len(tokens):
                 if tokens[i+1][0] == TOK_SELECTE:
                     return [OP_SELECT], i + 1
-            raise Exception('Invalid select parameters!')
+            raise Error('Invalid select parameters!')
         
         while i < len(tokens):
             if tokens[i][0] == TOK_SELECTE:
@@ -521,10 +524,10 @@ def run(mimsy, code):
             if mimsy.macros.has_key(lit[1]):
                 l = mimsy.macros[lit[1]]
             if not l:
-                raise Exception('Undefined macro')
+                raise Error('Undefined macro')
             else:
                 if callable(l):
-                    raise Exception('External function found as an argument')
+                    raise Error('External function found as an argument')
                 return run_literal(l)
         elif type(lit[1]) in (type(float()), type(int())):
             return lit[1]
@@ -555,7 +558,7 @@ def run(mimsy, code):
             if type(mimsy.memory[REG_HAND]) == type(list()):
                 mimsy.memory[REG_SELECT] = copy.deepcopy(mimsy.memory[REG_HAND])
             else:
-                raise Exception('($) failed, In Hand not list.')
+                raise Error('($) failed, In Hand not list.')
         elif args[0] == None:
             mimsy.memory[REG_SELECT].append(args[1])
         else:
@@ -569,14 +572,20 @@ def run(mimsy, code):
         indices = mimsy.memory[REG_SELECT]
         for i in indices[:-1]:
             sel = sel[i]
-        sel[indices[-1]] = copy.deepcopy(mimsy.memory[REG_HAND])
+        try:
+            sel[indices[-1]] = copy.deepcopy(mimsy.memory[REG_HAND])
+        except TypeError:
+            raise Error('Select out of bounds')
     
     def op_get(mimsy, args):
         sel = mimsy.memory
         indices = mimsy.memory[REG_SELECT]
         for i in indices[:-1]:
             sel = sel[i]
-        mimsy.memory[REG_HAND] = copy.deepcopy(sel[indices[-1]])
+        try:
+            mimsy.memory[REG_HAND] = copy.deepcopy(sel[indices[-1]])
+        except TypeError:
+            raise Error('Select out of bounds')
     
     def op_lit(mimsy, args):
         mimsy.memory[REG_HAND] = run_literal(args[0])
@@ -591,7 +600,7 @@ def run(mimsy, code):
             if mimsy.memory[REG_HAND] == 0:
                 del sel[indices[-1]]
             elif mimsy.memory[REG_HAND] <= 0:
-                raise Exception(', failed, cannot have negative integers')
+                raise Error(', failed, cannot have negative integers')
             else:
                 sel[indices[-1]] = [0] * mimsy.memory[REG_HAND]
         elif type(mimsy.memory[REG_HAND]) == type(list()):
@@ -605,14 +614,14 @@ def run(mimsy, code):
             # List of size two in hand.
             elif len(mimsy.memory[REG_HAND]) == 2:
                 if type(sel[indices[-1]]) in (type(int()), type(float())):
-                    raise Exception('` failed, cannot sublist a non-list')
+                    raise Error('` failed, cannot sublist a non-list')
                 else:
                     mimsy.memory[REG_HAND] = \
                         sel[indices[-1]][mimsy.memory[REG_HAND][0]:mimsy.memory[REG_HAND][1]]
             # List of size three in hand.
             elif len(mimsy.memory[REG_HAND]) == 3:
                 if type(sel[indices[-1]]) in (type(int()), type(float())):
-                    raise Exception('` failed, cannot insert a list into a non-list')
+                    raise Error('` failed, cannot insert a list into a non-list')
                 else:
                     hand0 = mimsy.memory[REG_HAND][0]
                     hand1 = mimsy.memory[REG_HAND][1]
@@ -623,7 +632,7 @@ def run(mimsy, code):
                     else:
                         sel[indices[-1]][hand0:hand1] = [0] * hand2
         elif type(mimsy.memory[REG_HAND]) == type(float):
-            raise Exception(', failed, cannot have float in hand.')
+            raise Error(', failed, cannot have float in hand.')
     
     def op_name(mimsy, args):
         if mimsy.macros.has_key(args[0]):
@@ -633,10 +642,13 @@ def run(mimsy, code):
             else:
                 mimsy.memory[REG_HAND] = copy.deepcopy(ele)
         else:
-            raise Exception('Undefined macro')
+            raise Error('Undefined macro')
     
     def op_macro(mimsy, args):
-        mimsy.macros[args[0]] = copy.deepcopy(args[1])
+        if len(args) == 1:
+            mimsy.macros[args[0]] = copy.deepcopy(mimsy.memory[REG_HAND])
+        elif len(args) == 2:
+            mimsy.macros[args[0]] = copy.deepcopy(args[1])
     
     def op_mult(mimsy, args):
         sel = mimsy.memory
@@ -646,7 +658,7 @@ def run(mimsy, code):
         
         if type(sel[indices[-1]]) == type(list()) or \
             mimsy.memory[REG_HAND] == type(list()):
-            raise Exception('Cannot multiply with lists.')
+            raise Error('Cannot multiply with lists.')
         else:
             mimsy.memory[REG_HAND] *= sel[indices[-1]]
     
@@ -658,7 +670,7 @@ def run(mimsy, code):
         
         if type(sel[indices[-1]]) == type(list()) or \
             mimsy.memory[REG_HAND] == type(list()):
-            raise Exception('Cannot divide with lists.')
+            raise Error('Cannot divide with lists.')
         else:
             mimsy.memory[REG_HAND] = sel[indices[-1]] / mimsy.memory[REG_HAND]
     
@@ -670,7 +682,7 @@ def run(mimsy, code):
         
         if type(sel[indices[-1]]) == type(list()) or \
             mimsy.memory[REG_HAND] == type(list()):
-            raise Exception('Cannot mod with lists.')
+            raise Error('Cannot mod with lists.')
         else:
             res = sel[indices[-1]] / mimsy.memory[REG_HAND]
             rem = sel[indices[-1]] % mimsy.memory[REG_HAND]
@@ -684,7 +696,7 @@ def run(mimsy, code):
         
         if type(sel[indices[-1]]) == type(list()) or \
             mimsy.memory[REG_HAND] == type(list()):
-            raise Exception('Cannot subtract with lists.')
+            raise Error('Cannot subtract with lists.')
         else:
             mimsy.memory[REG_HAND] = sel[indices[-1]] - mimsy.memory[REG_HAND]
     
@@ -696,7 +708,7 @@ def run(mimsy, code):
         
         if type(sel[indices[-1]]) == type(list()) or \
             mimsy.memory[REG_HAND] == type(list()):
-            raise Exception('Cannot add with lists.')
+            raise Error('Cannot add with lists.')
         else:
             mimsy.memory[REG_HAND] += sel[indices[-1]]
     
@@ -708,7 +720,7 @@ def run(mimsy, code):
         
         if type(sel[indices[-1]]) == type(list()) or \
             mimsy.memory[REG_HAND] == type(list()):
-            raise Exception('Cannot and with lists.')
+            raise Error('Cannot and with lists.')
         else:
             mimsy.memory[REG_HAND] = mimsy.memory[REG_HAND] & sel[indices[-1]]
     
@@ -720,7 +732,7 @@ def run(mimsy, code):
         
         if type(sel[indices[-1]]) == type(list()) or \
             mimsy.memory[REG_HAND] == type(list()):
-            raise Exception('Cannot xor with lists.')
+            raise Error('Cannot xor with lists.')
         else:
             mimsy.memory[REG_HAND] = mimsy.memory[REG_HAND] ^ sel[indices[-1]]
     
@@ -732,7 +744,7 @@ def run(mimsy, code):
         
         if type(sel[indices[-1]]) == type(list()) or \
             mimsy.memory[REG_HAND] == type(list()):
-            raise Exception('Cannot or with lists.')
+            raise Error('Cannot or with lists.')
         else:
             mimsy.memory[REG_HAND] = mimsy.memory[REG_HAND] | sel[indices[-1]]
     
@@ -744,7 +756,7 @@ def run(mimsy, code):
         
         if type(sel[indices[-1]]) == type(list()) or \
             mimsy.memory[REG_HAND] == type(list()):
-            raise Exception('Cannot add with lists.')
+            raise Error('Cannot add with lists.')
         else:
             mimsy.memory[REG_HAND] = ~mimsy.memory[REG_HAND]
     
@@ -762,26 +774,32 @@ def run(mimsy, code):
         
         if type(sel[indices[-1]]) == type(list()) or \
             mimsy.memory[REG_HAND] == type(list()):
-            raise Exception('Cannot compare with lists.')
+            raise Error('Cannot compare with lists.')
         else:
             mimsy.memory[REG_FLAGS][FLAG_EQ] = int(mimsy.memory[REG_HAND] == sel[indices[-1]])
             mimsy.memory[REG_FLAGS][FLAG_NE] = int(mimsy.memory[REG_HAND] != sel[indices[-1]])
             mimsy.memory[REG_FLAGS][FLAG_LT] = int(sel[indices[-1]] < mimsy.memory[REG_HAND])
             mimsy.memory[REG_FLAGS][FLAG_GT] = int(sel[indices[-1]] > mimsy.memory[REG_HAND])
     
-    def op_type(mimsy, args):
-        raise Exception('Not implemented')
+    def op_len(mimsy, args):
+        if type(mimsy.memory[REG_HAND]) == type(list()):
+            mimsy.memory[REG_HAND] = len(mimsy.memory[REG_HAND])
+        else:
+            mimsy.memory[REG_HAND] = -1
     
     def op_save(mimsy, args):
         ip = mimsy.memory[REG_IP]
-        
+        skip = mimsy.memory[REG_HAND] + 1
         while ip < len(mimsy.memory[REG_CODE]):
             if mimsy.memory[REG_CODE][ip][0] == OP_PLACEHOLD:
+                skip -= 1
+            
+            if skip <= 0:
                 break
             ip += 1
         else:
             # Didn't find a ;
-            raise Exception('@ failed, couldn\'t find a ;')
+            raise Error('@ failed, couldn\'t find a ;')
         mimsy.memory[REG_JMP].append(ip)
     
     def op_placehold(mimsy, args):
@@ -793,12 +811,14 @@ def run(mimsy, code):
     def op_jmpeq(mimsy, args):
         if mimsy.memory[REG_HAND] in (None, 0):
             mimsy.memory[REG_IP] = mimsy.memory[REG_JMP].pop()
+        else:
+            mimsy.memory[REG_JMP].pop()
     
     def op_call(mimsy, args):
         if type(mimsy.memory[REG_HAND]) == type(int()):
             mimsy.memory[REG_JMP].append(mimsy.memory[REG_HAND])
         else:
-            raise Exception('` Failed, tried to place a not integer on the JMP stack.')
+            raise Error('` Failed, tried to place a not integer on the JMP stack.')
         
     optable = {
         OP_SELECT: op_select,
@@ -819,7 +839,7 @@ def run(mimsy, code):
         OP_NEG: op_neg,
         OP_NOT: op_not,
         OP_CMP: op_cmp,
-        OP_TYPE: op_type,
+        OP_LEN: op_len,
         OP_SAVE: op_save,
         OP_PLACEHOLD: op_placehold,
         OP_JMP: op_jmp,
@@ -886,7 +906,8 @@ if __name__ == '__main__':
         print 'Running...'
         print
         run(mimsy, program)
+        print
         print 'Success!'
-    except Exception as e:
+    except Error as e:
         for arg in e.args:
             print arg,
