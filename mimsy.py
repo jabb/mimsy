@@ -117,6 +117,7 @@ def string_to_list(s):
     for i in xrange(len(s)):
         l.append([OP_LIT, ord(s[i])])
     return l
+    
 
 def tokenize(string):
     """
@@ -190,7 +191,7 @@ def analize(tokens):
             i += 1
         else:
             raise Error('Stray [ found!')
-        return i + 1
+        return i
     
     def check_macro(tokens, i):
         i += 1
@@ -219,7 +220,7 @@ def analize(tokens):
             i += 1
         else:
             raise Error('Stray { found!')
-        return i + 1
+        return i
     
     def check_select(tokens, i):
         i += 1
@@ -404,7 +405,7 @@ def compil(tokens):
             raise Error('Bug in compile_literal')
     
     def compile_name(tokens, i):
-        return [OP_NAME, tokens[i][1]], i
+        return [OP_NAME, [OP_LIT, string_to_list(tokens[i][1])]], i
     
     def compile_list(tokens, i):
         i += 1
@@ -528,14 +529,15 @@ def run(mimsy, code):
         """
         Returns the equivalent python data for the literal.
         """
-        
+
         if lit is None:
             return None
-
+        
         elif lit[0] == OP_NAME:
             l = None
-            if mimsy.macros.has_key(lit[1]):
-                l = mimsy.macros[lit[1]]
+            entry = list_to_string(lit[1])
+            if mimsy.macros.has_key():
+                l = mimsy.macros[entry]
             if not l:
                 raise Error('Undefined macro')
             else:
@@ -648,8 +650,11 @@ def run(mimsy, code):
             raise Error(', failed, cannot have float in hand.')
     
     def op_name(mimsy, args):
-        if mimsy.macros.has_key(args[0]):
-            ele = mimsy.macros[args[0]]
+        entry = ""
+        for i in args[0]:
+            entry += chr(i)
+        if mimsy.macros.has_key(entry):
+            ele = mimsy.macros[entry]
             if callable(ele):
                 ele(mimsy)
             else:
@@ -658,13 +663,16 @@ def run(mimsy, code):
             raise Error('Undefined macro')
     
     def op_macro(mimsy, args):
+        entry = ""
+        for i in args[0]:
+            entry += chr(i)
         if len(args) == 1:
             if mimsy.memory[REG_HAND] == None:
-                del mimsy.macros[args[0]]
+                del mimsy.macros[entry]
             else:
-                mimsy.macros[args[0]] = copy.deepcopy(mimsy.memory[REG_HAND])
+                mimsy.macros[entry] = copy.deepcopy(mimsy.memory[REG_HAND])
         elif len(args) == 2:
-            mimsy.macros[args[0]] = copy.deepcopy(args[1])
+            mimsy.macros[entry] = copy.deepcopy(args[1])
     
     def op_mult(mimsy, args):
         sel = mimsy.memory
@@ -879,7 +887,7 @@ def run(mimsy, code):
                     # Fix for not running macro definition names.
                     if mimsy.memory[REG_CODE][mimsy.memory[REG_IP]][0] == OP_MACRO and \
                         lit[0] == OP_NAME:
-                        args.append(lit[1])
+                        args.append(run_literal(lit[1]))
                     else:
                         args.append(run_literal(lit))
             optable[mimsy.memory[REG_CODE][mimsy.memory[REG_IP]][0]](mimsy, args)
