@@ -139,7 +139,7 @@ def tokenize(string):
     
     rules = [
         (TOK_OP, re.compile(r'\<|\>|\,|\*|\/|\%|\-|\+|\&|\^|\||\~|\!|\=|\$|\@|\;|\:|\?|\`')),
-        (TOK_STRING, re.compile(r'\".*\"')),
+        (TOK_STRING, re.compile(r'"[^"\r\n]*"')),
         (TOK_NUMBER, re.compile(r'\_?\d+\.*\d*')),
         (TOK_NAME, re.compile(r'[a-zA-Z]+')),
         (TOK_LISTB, re.compile(r'\[')),
@@ -149,25 +149,29 @@ def tokenize(string):
         (TOK_SELECTB, re.compile(r'\(')),
         (TOK_SELECTE, re.compile(r'\)'))
     ]
-    whitespace = re.compile(r'[ ]+')
+    whitespace = re.compile(r'[\s]+')
     
     tokens = []
     
     while string:
         match = False
         for tok, pattern in rules:
+            
             m = whitespace.match(string)
             if m:
+                match = True
                 string = string[m.end():]
                 
             m = pattern.match(string)
             if m:
                 match = True
+                if tok == TOK_STRING:
+                    print m.group(0)
                 tokens.append([tok, m.group(0)])
                 string = string[m.end():]
         if match == False:
-            raise Error('Syntax error')
-
+            raise Error('Syntax error: %s' % string)
+            
     return tokens
 
 def analyze(tokens):
@@ -613,6 +617,8 @@ def run(mimsy, code):
         
         if type(mimsy.memory[REG_HAND]) == type(int()):
             if mimsy.memory[REG_HAND] == 0:
+                if sel is mimsy.memory:
+                    raise Error(', failed, cannot delete main memory')
                 del sel[indices[-1]]
             elif mimsy.memory[REG_HAND] <= 0:
                 raise Error(', failed, cannot have negative integers')
