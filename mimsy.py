@@ -170,7 +170,7 @@ def tokenize(string):
 
     return tokens
 
-def analize(tokens):
+def analyze(tokens):
     """
     This will check the validity of a mimsy token stream.
     """
@@ -616,36 +616,18 @@ def run(mimsy, code):
                 del sel[indices[-1]]
             elif mimsy.memory[REG_HAND] <= 0:
                 raise Error(', failed, cannot have negative integers')
-            else:
+            elif type(sel[indices[-1]]) != type(list()):
                 sel[indices[-1]] = [0] * mimsy.memory[REG_HAND]
+            else:
+                for i in range(mimsy.memory[REG_HAND]):
+                    sel[indices[-1]].append(0)
         elif type(mimsy.memory[REG_HAND]) == type(list()):
             # List of size one in hand.
             if len(mimsy.memory[REG_HAND]) == 1:
-                if type(sel[indices[-1]]) in (type(int()), type(float())):
-                    sel[indices[-1]] = mimsy.memory[REG_HAND][0]
+                if type(sel[indices[-1]]) != type(list()):
+                    Error(', failed, cannot insert into a non-dynamic array')
                 else:
-                    for i in range(len(sel[indices[-1]])):
-                        sel[indices[-1]][i] = mimsy.memory[REG_HAND][0]
-            # List of size two in hand.
-            elif len(mimsy.memory[REG_HAND]) == 2:
-                if type(sel[indices[-1]]) in (type(int()), type(float())):
-                    raise Error('` failed, cannot sublist a non-list')
-                else:
-                    mimsy.memory[REG_HAND] = \
-                        sel[indices[-1]][mimsy.memory[REG_HAND][0]:mimsy.memory[REG_HAND][1]]
-            # List of size three in hand.
-            elif len(mimsy.memory[REG_HAND]) == 3:
-                if type(sel[indices[-1]]) in (type(int()), type(float())):
-                    raise Error('` failed, cannot insert a list into a non-list')
-                else:
-                    hand0 = mimsy.memory[REG_HAND][0]
-                    hand1 = mimsy.memory[REG_HAND][1]
-                    hand2 = mimsy.memory[REG_HAND][2]
-                    # Makes appending possible. TODO: Come up with a standard.
-                    if hand1 > hand0:
-                        sel[indices[-1]][hand0:] = [0] * hand2
-                    else:
-                        sel[indices[-1]][hand0:hand1] = [0] * hand2
+                    sel[indices[-1]].insert(mimsy.memory[REG_HAND][0], 0)
         elif type(mimsy.memory[REG_HAND]) == type(float):
             raise Error(', failed, cannot have float in hand.')
     
@@ -911,6 +893,7 @@ if __name__ == '__main__':
         print 'No file specified...'
         sys.exit()
     
+    
     for line in f:
         i = line.find("#")
         fstr += line[0:i] + ' '
@@ -922,7 +905,7 @@ if __name__ == '__main__':
         tokens = tokenize(fstr)
         print 'Success!'
         print 'Analyzing...',
-        analize(tokens)
+        analyze(tokens)
         print 'Success!'
         print 'Compiling...', 
         program = compil(tokens)

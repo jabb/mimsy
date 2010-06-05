@@ -1,4 +1,4 @@
 
-{haha}
-{haha 5}
-xmimNull{haha}
+# A considerably shorter Hello, World program:
+#(0)"Hello, world!"<[_1 0 1],(1)[0 0]<0@;(^)(,_1)>`(1)>($)>xioPut0=(1,1)1+<(?)(,0)>?
+(0)0<0@;(0)>xioPut xioGet(0)<_1=(^)(,_1)>`(?)(,0)>?
