@@ -29,7 +29,7 @@
 #
 import copy, sys, re
 
-MEMORY_SIZE = 100
+MEMORY_SIZE = 250
 
 TOK_OP, TOK_STRING, TOK_NUMBER, TOK_NAME, TOK_LISTB, TOK_LISTE, \
 TOK_MACROB, TOK_MACROE, TOK_SELECTB, TOK_SELECTE = range(10)
@@ -38,7 +38,7 @@ OP_SELECT, OP_SET, OP_GET, OP_LIT, OP_MANIP,        \
 OP_NAME, OP_MACRO,                                  \
 OP_MULT, OP_DIV, OP_MOD, OP_SUB, OP_PLUS, OP_AND,   \
 OP_XOR, OP_OR, OP_NEG, OP_NOT, OP_CMP, OP_LEN,     \
-OP_SAVE, OP_PLACEHOLD, OP_JMP, OP_JMPEQ, OP_CALL = range(24)
+OP_SAVE, OP_JMP, OP_PLACEHOLD, OP_SKIP, OP_GO, OP_CALL = range(25)
 
 # Register constants.
 REG_HAND, REG_CODE, REG_IP, REG_JMP, REG_FLAGS, REG_SELECT = range(MEMORY_SIZE, MEMORY_SIZE + 6)
@@ -67,10 +67,10 @@ class System(object):
         
         # Load default macros.
         
-        def xioPut(mimsy):
+        def xPut(mimsy):
             sys.stdout.write(chr(mimsy.memory[REG_HAND]))
         
-        def xioGet(mimsy):
+        def xGet(mimsy):
             i = sys.stdin.read(1)
             
             if len(i) == 0:
@@ -80,7 +80,7 @@ class System(object):
             
             
         
-        def xmimDebug(mimsy):
+        def xOutputMemory(mimsy):
             print 'Memory -- %d cells' % (len(self.memory) - 6)
             print self.memory[0:MEMORY_SIZE]
             print
@@ -100,15 +100,20 @@ class System(object):
             for key, data in self.macros.iteritems():
                 print '%s: \t%s' % (key, data)
         
-        self.macros["xioPut"] = xioPut
-        self.macros["xioGet"] = xioGet
-        self.macros["xmimDebug"] = xmimDebug
-        self.macros["xmimNull"] = None
+        def xOutputSelect(mimsy):
+            print 'Select[%d]:\t%s' % (REG_SELECT, self.memory[REG_SELECT])
+            print 
+        
+        self.macros["xPut"] = xPut
+        self.macros["xGet"] = xGet
+        self.macros["xOutputMemory"] = xOutputMemory
+        self.macros["xOutputSelect"] = xOutputSelect
+        self.macros["null"] = None
         
 
 def list_to_string(l):
     s = ""
-    for i in l:
+    for i in l[1]:
         s += chr(i[1])
     return s
     
@@ -138,7 +143,7 @@ def tokenize(string):
     """
     
     rules = [
-        (TOK_OP, re.compile(r'\<|\>|\,|\*|\/|\%|\-|\+|\&|\^|\||\~|\!|\=|\$|\@|\;|\:|\?|\`')),
+        (TOK_OP, re.compile(r'\<|\>|\,|\*|\/|\%|\-|\+|\&|\^|\||\~|\!|\=|\$|\@|\;|\:|\?|\`|\'')),
         (TOK_STRING, re.compile(r'"[^"\r\n]*"')),
         (TOK_NUMBER, re.compile(r'\_?\d+\.*\d*')),
         (TOK_NAME, re.compile(r'[a-zA-Z]+')),
@@ -165,8 +170,6 @@ def tokenize(string):
             m = pattern.match(string)
             if m:
                 match = True
-                if tok == TOK_STRING:
-                    print m.group(0)
                 tokens.append([tok, m.group(0)])
                 string = string[m.end():]
         if match == False:
@@ -228,10 +231,10 @@ def analyze(tokens):
     
     def check_select(tokens, i):
         i += 1
-        NUMBERNAME, COMMA, EITHER = range(3)
+        NUMBER, COMMA, EITHER = range(3)
         expected = EITHER
         
-        if tokens[i][1] in "$~@!*^?":
+        if tokens[i][1] in "$@!*^?":
             if i+1 >= len(tokens):
                 raise Error('Stray ( found!')
             if tokens[i+1][0] != TOK_SELECTE:
@@ -252,17 +255,17 @@ def analyze(tokens):
             if tokens[i][0] == TOK_SELECTE:
                 if expected == EITHER:
                     raise Error('No parameters!')
-                if expected == NUMBERNAME:
+                if expected == NUMBER:
                     raise Error('Select parameter; trailing comma')
                 break
-            elif tokens[i][0] in (TOK_NUMBER, TOK_NAME):
-                if expected not in (NUMBERNAME, EITHER):
+            elif tokens[i][0] == TOK_NUMBER:
+                if expected not in (NUMBER, EITHER):
                     raise Error('Invalid select parameters!')
                 expected = COMMA
             elif tokens[i][1] == ',':
                 if expected not in (COMMA, EITHER):
                     raise Error('Invalid select parameters!')
-                expected = NUMBERNAME
+                expected = NUMBER
             else:
                 raise Error('Invalid select parameters!')
             i += 1
@@ -328,7 +331,7 @@ def compil(tokens):
     
     OP_MULT, OP_DIV, OP_MOD, OP_SUB, OP_PLUS, OP_AND,
     OP_XOR, OP_OR, OP_NEG, OP_NOT, OP_CMP, OP_LEN,
-    OP_SAVE, OP_PLACEHOLD, OP_JMP, OP_JMPEQ, OP_CALL,
+    OP_SAVE, OP_JMP, OP_PLACEHOLD, OP_SKIP, OP_GO, OP_CALL,
     OP_SET, OP_GET, OP_MANIP
         All of these require no arguments, they're just single element
         instructions.
@@ -376,7 +379,9 @@ def compil(tokens):
         elif tokens[i][1] == ':':
             return [OP_JMP], i
         elif tokens[i][1] == '?':
-            return [OP_JMPEQ], i
+            return [OP_SKIP], i
+        elif tokens[i][1] == '\'':
+            return [OP_GO], i
         elif tokens[i][1] == '`':
             return [OP_CALL], i
         else:
@@ -440,7 +445,8 @@ def compil(tokens):
                 return op, i
             elif tokens[i][0] == TOK_NAME:
                 name, i = compile_name(tokens, i)
-                op.append(name)
+                # We now have the name as an opcode in itself. We wan't the string.
+                op.append(name[1])
             elif tokens[i][0] in (TOK_NUMBER, TOK_STRING):
                 lit, i = compile_literal(tokens, i)
                 op.append(lit)
@@ -452,11 +458,11 @@ def compil(tokens):
     
     def compile_select(tokens, i):
         i += 1
-        NUMBERNAME, COMMA, EITHER = range(3)
+        NUMBER, COMMA, EITHER = range(3)
         expected = EITHER
         literals = []
         
-        if tokens[i][1] in "$~@!*^?":
+        if tokens[i][1] in "$@!*^?":
             if tokens[i][1] == '$':
                 return [OP_SELECT, [OP_LIT, []]], i
             if tokens[i][1] == '@':
@@ -469,8 +475,6 @@ def compil(tokens):
                 return [OP_SELECT, [OP_LIT, REG_JMP]], i
             if tokens[i][1] == '?':
                 return [OP_SELECT, [OP_LIT, REG_FLAGS]], i
-            if tokens[i][1] == '~':
-                return [OP_SELECT, [OP_LIT, REG_SELECT]], i
         elif tokens[i][1] == ',':
             if i+2 < len(tokens):
                 if tokens[i+1][0] == TOK_NAME and tokens[i+2][0] == TOK_SELECTE:
@@ -540,14 +544,14 @@ def run(mimsy, code):
         elif lit[0] == OP_NAME:
             l = None
             entry = list_to_string(lit[1])
-            if mimsy.macros.has_key():
+            if mimsy.macros.has_key(entry):
                 l = mimsy.macros[entry]
-            if not l:
+            if l == None:
                 raise Error('Undefined macro')
             else:
                 if callable(l):
                     raise Error('External function found as an argument')
-                return run_literal(l)
+                return copy.deepcopy(l)
         elif type(lit[1]) in (type(float()), type(int())):
             return lit[1]
         elif type(lit[1]) == type(list()):
@@ -631,7 +635,8 @@ def run(mimsy, code):
             # List of size one in hand.
             if len(mimsy.memory[REG_HAND]) == 1:
                 if type(sel[indices[-1]]) != type(list()):
-                    Error(', failed, cannot insert into a non-dynamic array')
+                    sel[indices[-1]] = [sel[indices[-1]]]
+                    sel[indices[-1]].insert(mimsy.memory[REG_HAND][0], 0)
                 else:
                     sel[indices[-1]].insert(mimsy.memory[REG_HAND][0], 0)
         elif type(mimsy.memory[REG_HAND]) == type(float):
@@ -801,30 +806,60 @@ def run(mimsy, code):
     
     def op_save(mimsy, args):
         ip = mimsy.memory[REG_IP]
-        skip = mimsy.memory[REG_HAND] + 1
-        while ip < len(mimsy.memory[REG_CODE]):
+        iter = 1
+        if mimsy.memory[REG_HAND] < 0:
+            iter = -1
+            skip = (mimsy.memory[REG_HAND] * -1)
+        else:
+            skip = mimsy.memory[REG_HAND] + 1
+        # Since we can iterate backwards we have to check both bounds.
+        while ip < len(mimsy.memory[REG_CODE]) and ip >= 0:
             if mimsy.memory[REG_CODE][ip][0] == OP_PLACEHOLD:
                 skip -= 1
             
             if skip <= 0:
                 break
-            ip += 1
+            ip += iter
         else:
             # Didn't find a ;
             raise Error('@ failed, couldn\'t find a ;')
         mimsy.memory[REG_JMP].append(ip)
     
+    def op_jmp(mimsy, args):
+        ip = mimsy.memory[REG_IP]
+        iter = 1
+        if mimsy.memory[REG_HAND] < 0:
+            iter = -1
+            skip = (mimsy.memory[REG_HAND] * -1)
+        else:
+            skip = mimsy.memory[REG_HAND] + 1
+        # Since we can iterate backwards we have to check both bounds.
+        while ip < len(mimsy.memory[REG_CODE]) and ip >= 0:
+            if mimsy.memory[REG_CODE][ip][0] == OP_PLACEHOLD:
+                skip -= 1
+            
+            if skip <= 0:
+                break
+            ip += iter
+        else:
+            # Didn't find a ;
+            raise Error(': failed, couldn\'t find a ;')
+        mimsy.memory[REG_IP] = ip
+            
     def op_placehold(mimsy, args):
         pass
     
-    def op_jmp(mimsy, args):
-        mimsy.memory[REG_IP] = mimsy.memory[REG_JMP].pop()
+    def op_skip(mimsy, args):
+        sel = mimsy.memory
+        indices = mimsy.memory[REG_SELECT]
+        for i in indices[:-1]:
+            sel = sel[i]
+        
+        if sel[indices[-1]] not in (0, None):
+            mimsy.memory[REG_IP] += 1
     
-    def op_jmpeq(mimsy, args):
-        if mimsy.memory[REG_HAND] in (None, 0):
-            mimsy.memory[REG_IP] = mimsy.memory[REG_JMP].pop()
-        else:
-            mimsy.memory[REG_JMP].pop()
+    def op_go(mimsy, args):
+        mimsy.memory[REG_IP] = mimsy.memory[REG_JMP].pop()
     
     def op_call(mimsy, args):
         if type(mimsy.memory[REG_HAND]) == type(int()):
@@ -853,9 +888,10 @@ def run(mimsy, code):
         OP_CMP: op_cmp,
         OP_LEN: op_len,
         OP_SAVE: op_save,
-        OP_PLACEHOLD: op_placehold,
         OP_JMP: op_jmp,
-        OP_JMPEQ: op_jmpeq,
+        OP_PLACEHOLD: op_placehold,
+        OP_SKIP: op_skip,
+        OP_GO: op_go,
         OP_CALL: op_call
     }
     
